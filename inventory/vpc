@@ -1,0 +1,9 @@
+[vpc]
+vpc-runner
+
+[vpc:children]
+blue
+green
+
+[runner]
+vpc-runner

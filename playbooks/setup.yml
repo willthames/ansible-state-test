@@ -1,0 +1,7 @@
+- hosts: vpc-runner
+  connection: local
+  gather_facts: no
+  strategy: state
+
+  roles:
+  - ec2_vpc_state

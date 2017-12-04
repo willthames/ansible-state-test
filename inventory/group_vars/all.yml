@@ -1,0 +1,14 @@
+user_data: |
+  dnf install -y httpd
+  systemctl httpd start
+  echo "<h1>{{ env }} {{ version }}</h1>" > /var/www/html/index.html
+
+ami_id: ami-fedafc9d # Centos 7 with updates for HVM
+region: ap-southeast-2
+launch_config_name: "lc-{{ env }}-{{ version }}"
+asg_name: "asg-{{ env }}-{{ version }}"
+zones:
+  - ap-southeast-2a
+  - ap-southeast-2b
+key_name: multiregion
+

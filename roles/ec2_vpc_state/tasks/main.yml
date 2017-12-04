@@ -1,0 +1,88 @@
+- name: ensure vpc exists
+  ec2_vpc_net:
+    name: "{{ vpc_name }}"
+    cidr_block: "{{ vpc_cidr }}"
+    region: "{{ region }}"
+    profile: "{{ profile|default(omit) }}"
+    resource_id: "{{ vpc_name }}"
+
+- name: create subnets
+  ec2_vpc_subnet:
+    cidr: "{{ item.cidr }}"
+    az: "{{ item.zone }}"  # single subnet only
+    vpc_id: "{{ ansible_resources.ec2_vpc_net[vpc_name] }}"
+    region: "{{ region }}"
+    profile: "{{ profile|default(omit) }}"
+    tags: "{{ item.tags }}"
+    resource_id: "{{ item.tags.Name }}"
+  with_items: "{{ subnets }}"
+
+- debug:
+    var: ansible_resources.ec2_vpc_subnet
+
+- name: create NACL
+  ec2_vpc_nacl:
+    name: "{{ vpc_name }}-test-nacl"
+    resource_id: "{{ vpc_name }}-test-nacl"
+    vpc_id: "{{ ansible_resources.ec2_vpc_net[vpc_name].id }}"
+    region: "{{ region }}"
+    profile: "{{ profile|default(omit) }}"
+    subnets: "{{ ansible_resources.ec2_vpc_subnet[subnets[0].tags.Name] }}"
+
+- name: create internet gateway
+  ec2_vpc_igw:
+    resource_id: "{{ vpc_name }}-igw"
+    region: "{{ region }}"
+    profile: "{{ profile|default(omit) }}"
+    vpc_id: "{{ ansible_resources.ec2_vpc_net[vpc_name].id }}"
+
+- name: create public route table
+  ec2_vpc_route_table:
+    tags:
+      Name: public
+    subnets: "{{ ansible_resources.ec2_vpc_subnet | json_query('[?tags.Public==`True`].id') }}"
+    routes:
+    - dest: 0.0.0.0/0
+      gateway_id: igw
+    vpc_id: "{{ ansible_resources.ec2_vpc_net[vpc_name].id }}"
+    region: "{{ region }}"
+    profile: "{{ profile|default(omit) }}"
+
+- name: create NAT gateway
+  ec2_vpc_nat_gateway:
+    subnet_id: "{{ ansible_resources.ec2_vpc_subnet[vpc_outbound_subnet].id }}"
+    region: "{{ region }}"
+    profile: "{{ profile|default(omit) }}"
+    resource_id: "{{ vpc_name }}-nat-gateway"
+    if_exist_do_not_create: yes
+  when: vpc_outbound_subnet is defined
+
+- name: select outbound subnets
+  set_fact:
+    outbound_subnets: "{{ ansible_resources.ec2_vpc_subnet | json_query('[?tags.Public==`False` && tags.NatGateway==`True`].id') }}"
+
+- name: create outbound route table
+  ec2_vpc_route_table:
+    tags:
+      Name: private
+    subnets: "{{ outbound_subnets }}"
+    routes:
+    - dest: 0.0.0.0/0
+      gateway_id: "{{ ansible_resources.ec2_vpc_nat_gateway[vpc_name + '-nat-gateway'].nat_gateway_id }}"
+    vpc_id: "{{ ansible_resources.ec2_vpc_net[vpc_name].id }}"
+    region: "{{ region }}"
+    profile: "{{ profile|default(omit) }}"
+  when: outbound_subnets
+
+- name: create security groups
+  ec2_group:
+    name: "{{ item.name }}"
+    rules: "{{ item.rules }}"
+    vpc_id: "{{ ansible_resources.ec2_vpc_net[vpc_name].id }}"
+    region: "{{ region }}"
+    profile: "{{ profile|default(omit) }}"
+    description: "{{ item.name }}"
+    tags: "{{ item.tags }}"
+  with_items: "{{ security_groups }}"
+
+# in a real VPC you'd want NAT gateways, Network ACLs

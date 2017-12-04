@@ -1,0 +1,72 @@
+vpc_cidr: 10.3.0.0/16
+vpc_name: 003-vpc
+
+subnets:
+- cidr: 10.3.1.0/24
+  zone: ap-southeast-2a
+  tags:
+    Public: "True"
+    Name: 003-elb-subnet-a
+    Tier: load_balancer
+- cidr: 10.3.2.0/24
+  zone: ap-southeast-2b
+  tags:
+    Public: "True"
+    Name: 003-elb-subnet-b
+    Tier: load_balancer
+- cidr: 10.3.11.0/24
+  zone: ap-southeast-2a
+  nat_gateway: "True"
+  tags:
+    Public: "False"
+    Name: 003-web-subnet-a
+    NatGateway: "True"
+    Tier: application
+- cidr: 10.3.12.0/24
+  zone: ap-southeast-2b
+  nat_gateway: "True"
+  tags:
+    Public: "False"
+    Name: 003-web-subnet-b
+    NatGateway: "True"
+    Tier: application
+
+vpc_outbound_subnet: 003-elb-subnet-a
+
+security_groups:
+- name: 003-elb-sg
+  rules:
+  - cidr_ip: 0.0.0.0/0
+    ports:
+    - 80
+    proto: tcp
+  tags:
+    Tier: load-balancer
+- name: 003-web-sg
+  rules:
+  - group_name: 003-elb-sg
+    ports: 80
+    proto: tcp
+  tags:
+    Tier: application
+
+load_balancers:
+- name: 003-elb
+  listeners:
+    - Protocol: HTTP # Required. The protocol for connections from clients to the load balancer (HTTP or HTTPS) (case-sensitive).
+      Port: 80 # Required. The port on which the load balancer is listening.
+      DefaultActions:
+        - Type: forward # Required. Only 'forward' is accepted at this time
+          TargetGroupName: "{{ target_groups.default }}"
+  tags:
+    Application: app
+  subnets:
+    - "003-elb-subnet-a"
+    - "003-elb-subnet-b"
+  security_groups:
+    - "003-elb-sg"
+
+target_groups:
+  blue: "003-target-group-blue"
+  green: "003-target-group-green"
+  default: "003-target-group-default"
